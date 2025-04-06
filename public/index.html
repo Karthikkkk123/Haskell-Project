@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Symptom Checker</title>
+    <style>
+        :root {
+            --primary-color: #4CAF50;
+            --secondary-color: #45a049;
+            --background-color: #f4f4f4;
+            --text-color: #333;
+            --border-color: #ddd;
+            --error-color: #f44336;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+
+        .symptom-input {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+
+        .symptom-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .symptom-tag {
+            background: var(--primary-color);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .symptom-tag button {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0 0.5rem;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 1rem;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 0.8rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        button {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background: var(--secondary-color);
+        }
+
+        .results {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .result-item {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .result-item:last-child {
+            border-bottom: none;
+        }
+
+        .result-item h3 {
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .match-count {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .suggestions {
+            position: absolute;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            width: 100%;
+            z-index: 1000;
+            display: none;
+        }
+
+        .suggestion-item {
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+        }
+
+        .suggestion-item:hover {
+            background: var(--background-color);
+        }
+
+        .error-message {
+            color: var(--error-color);
+            background: #ffebee;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 1rem 0;
+        }
+
+        .loading::after {
+            content: '';
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--primary-color);
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 1rem;
+            }
+
+            .input-group {
+                flex-direction: column;
+            }
+
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Symptom Checker</h1>
+            <p>Enter your symptoms to find possible conditions</p>
+        </header>
+
+        <div class="error-message" id="errorMessage"></div>
+        <div class="loading" id="loading"></div>
+
+        <div class="symptom-input">
+            <div class="symptom-tags" id="symptomTags"></div>
+            <div class="input-group">
+                <input type="text" id="symptomInput" placeholder="Type a symptom...">
+                <button onclick="addSymptom()">Add Symptom</button>
+            </div>
+            <div class="suggestions" id="suggestions"></div>
+        </div>
+
+        <button onclick="checkSymptoms()" style="width: 100%; margin-bottom: 2rem;">Check Symptoms</button>
+
+        <div class="results" id="results"></div>
+    </div>
+
+    <script>
+        let allSymptoms = [];
+        let selectedSymptoms = new Set();
+
+        // Show error message
+        function showError(message) {
+            const errorMessage = document.getElementById('errorMessage');
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+
+        // Hide error message
+        function hideError() {
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        // Show loading indicator
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+        }
+
+        // Hide loading indicator
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        // Fetch all available symptoms when the page loads
+        fetch('http://localhost:3000/api/symptoms')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                allSymptoms = data.symptoms;
+                hideError();
+            })
+            .catch(error => {
+                console.error('Error fetching symptoms:', error);
+                showError('Error loading symptoms. Please make sure the backend server is running on port 3000.');
+            });
+
+        const symptomInput = document.getElementById('symptomInput');
+        const suggestions = document.getElementById('suggestions');
+        const symptomTags = document.getElementById('symptomTags');
+
+        // Show suggestions as user types
+        symptomInput.addEventListener('input', () => {
+            const input = symptomInput.value.toLowerCase();
+            if (input.length < 2) {
+                suggestions.style.display = 'none';
+                return;
+            }
+
+            const filtered = allSymptoms.filter(symptom => 
+                symptom.toLowerCase().includes(input) && !selectedSymptoms.has(symptom)
+            );
+
+            if (filtered.length > 0) {
+                suggestions.innerHTML = filtered
+                    .map(symptom => `<div class="suggestion-item">${symptom}</div>`)
+                    .join('');
+                suggestions.style.display = 'block';
+            } else {
+                suggestions.style.display = 'none';
+            }
+        });
+
+        // Handle suggestion clicks
+        suggestions.addEventListener('click', (e) => {
+            if (e.target.classList.contains('suggestion-item')) {
+                addSymptom(e.target.textContent);
+                symptomInput.value = '';
+                suggestions.style.display = 'none';
+            }
+        });
+
+        // Add symptom to the list
+        function addSymptom(symptom = null) {
+            const input = symptom || symptomInput.value.trim();
+            if (input && !selectedSymptoms.has(input)) {
+                selectedSymptoms.add(input);
+                const tag = document.createElement('div');
+                tag.className = 'symptom-tag';
+                tag.innerHTML = `
+                    ${input}
+                    <button onclick="removeSymptom('${input}')">&times;</button>
+                `;
+                symptomTags.appendChild(tag);
+                symptomInput.value = '';
+                suggestions.style.display = 'none';
+                hideError();
+            }
+        }
+
+        // Remove symptom from the list
+        function removeSymptom(symptom) {
+            selectedSymptoms.delete(symptom);
+            updateSymptomTags();
+        }
+
+        // Update symptom tags display
+        function updateSymptomTags() {
+            symptomTags.innerHTML = '';
+            selectedSymptoms.forEach(symptom => {
+                const tag = document.createElement('div');
+                tag.className = 'symptom-tag';
+                tag.innerHTML = `
+                    ${symptom}
+                    <button onclick="removeSymptom('${symptom}')">&times;</button>
+                `;
+                symptomTags.appendChild(tag);
+            });
+        }
+
+        // Check symptoms against the backend
+        function checkSymptoms() {
+            if (selectedSymptoms.size === 0) {
+                showError('Please add at least one symptom');
+                return;
+            }
+
+            showLoading();
+            hideError();
+
+            fetch('http://localhost:3000/api/check', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    symptoms: Array.from(selectedSymptoms)
+                })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                const results = document.getElementById('results');
+                if (data.conditions.length === 0) {
+                    results.innerHTML = '<div class="result-item">No matching conditions found.</div>';
+                } else {
+                    results.innerHTML = data.conditions
+                        .map(([condition, count]) => `
+                            <div class="result-item">
+                                <h3>${condition}</h3>
+                                <div class="match-count">Matching symptoms: ${count}</div>
+                            </div>
+                        `)
+                        .join('');
+                }
+                hideError();
+            })
+            .catch(error => {
+                console.error('Error checking symptoms:', error);
+                showError('Error checking symptoms. Please make sure the backend server is running on port 3000.');
+            })
+            .finally(() => {
+                hideLoading();
+            });
+        }
+
+        // Close suggestions when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.input-group') && !e.target.closest('.suggestions')) {
+                suggestions.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html> 
