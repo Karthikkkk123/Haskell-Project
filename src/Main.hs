@@ -17,19 +17,36 @@ import Data.List (sortBy)
 import Data.Ord (comparing)
 import Data.Char (toLower)
 
-import SymptomChecker (findMatchingConditions, allSymptoms)
+import SymptomChecker (findMatchingConditions, allSymptoms, getConditionAgeRange)
 
 -- Data types for JSON handling
-data SymptomRequest = SymptomRequest [Text]
-    deriving Show
+data SymptomRequest = SymptomRequest 
+    { symptoms :: [Text]
+    , age :: Int
+    } deriving Show
 
-data SymptomResponse = SymptomResponse [(Text, Int)]
+data ConditionInfo = ConditionInfo
+    { name :: Text
+    , matchCount :: Int
+    , ageRange :: Maybe (Int, Int)
+    } deriving Show
+
+data SymptomResponse = SymptomResponse [ConditionInfo]
     deriving Show
 
 -- JSON instances
 instance FromJSON SymptomRequest where
-    parseJSON (Object v) = SymptomRequest <$> v .: "symptoms"
+    parseJSON (Object v) = SymptomRequest 
+        <$> v .: "symptoms"
+        <*> v .: "age"
     parseJSON _ = fail "Expected an object"
+
+instance ToJSON ConditionInfo where
+    toJSON (ConditionInfo name count range) = object
+        [ "name" .= name
+        , "matchCount" .= count
+        , "ageRange" .= range
+        ]
 
 instance ToJSON SymptomResponse where
     toJSON (SymptomResponse conditions) = object ["conditions" .= conditions]
@@ -49,11 +66,12 @@ app request respond =
         ("POST", ["api", "check"]) -> do
             body <- strictRequestBody request
             case decode body of
-                Just (SymptomRequest symptoms) -> do
-                    let results = findMatchingConditions symptoms
+                Just (SymptomRequest symptoms age) -> do
+                    let results = findMatchingConditions symptoms age
+                    let conditionInfos = map (\(name, count) -> ConditionInfo name count (getConditionAgeRange name)) results
                     respond $ responseLBS status200 
                         [(hContentType, "application/json")] 
-                        $ encode $ SymptomResponse results
+                        $ encode $ SymptomResponse conditionInfos
                 Nothing -> respond $ responseLBS status400 
                     [(hContentType, "application/json")] 
                     $ encode $ object ["error" .= ("Invalid request" :: Text)]
@@ -70,9 +88,9 @@ app request respond =
 -- CORS middleware configuration
 corsMiddleware :: Middleware
 corsMiddleware = cors $ const $ Just CorsResourcePolicy
-    { corsOrigins = Nothing
+    { corsOrigins = Nothing  -- Allows all origins
     , corsMethods = [methodGet, methodPost, methodOptions]
-    , corsRequestHeaders = ["Content-Type"]
+    , corsRequestHeaders = ["Content-Type", "Accept"]  -- Allow Content-Type and Accept headers
     , corsExposedHeaders = Nothing
     , corsMaxAge = Nothing
     , corsVaryOrigin = False

@@ -131,6 +131,12 @@
             font-size: 0.9rem;
         }
 
+        .age-range {
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 0.25rem;
+        }
+
         .suggestions {
             position: absolute;
             background: white;
@@ -214,6 +220,10 @@
                 <button onclick="addSymptom()">Add Symptom</button>
             </div>
             <div class="suggestions" id="suggestions"></div>
+            <div class="age-input" style="margin-top: 1rem;">
+                <label for="ageInput">Age:</label>
+                <input type="number" id="ageInput" placeholder="Enter your age" min="0" max="120" style="width: 100px; margin-left: 0.5rem;">
+            </div>
         </div>
 
         <button onclick="checkSymptoms()" style="width: 100%; margin-bottom: 2rem;">Check Symptoms</button>
@@ -337,9 +347,12 @@
             });
         }
 
-        // Check symptoms against the backend
-        function checkSymptoms() {
-            if (selectedSymptoms.size === 0) {
+        // Check symptoms and display results
+        async function checkSymptoms() {
+            const symptoms = Array.from(selectedSymptoms);
+            const age = parseInt(document.getElementById('ageInput').value) || 0;
+
+            if (symptoms.length === 0) {
                 showError('Please add at least one symptom');
                 return;
             }
@@ -347,43 +360,50 @@
             showLoading();
             hideError();
 
-            fetch('http://localhost:3000/api/check', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    symptoms: Array.from(selectedSymptoms)
-                })
-            })
-            .then(response => {
+            try {
+                const response = await fetch('http://localhost:3000/api/check', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ symptoms, age })
+                });
+
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    throw new Error('Failed to check symptoms');
                 }
-                return response.json();
-            })
-            .then(data => {
-                const results = document.getElementById('results');
-                if (data.conditions.length === 0) {
-                    results.innerHTML = '<div class="result-item">No matching conditions found.</div>';
-                } else {
-                    results.innerHTML = data.conditions
-                        .map(([condition, count]) => `
-                            <div class="result-item">
-                                <h3>${condition}</h3>
-                                <div class="match-count">Matching symptoms: ${count}</div>
-                            </div>
-                        `)
-                        .join('');
-                }
-                hideError();
-            })
-            .catch(error => {
-                console.error('Error checking symptoms:', error);
-                showError('Error checking symptoms. Please make sure the backend server is running on port 3000.');
-            })
-            .finally(() => {
+
+                const data = await response.json();
+                displayResults(data.conditions);
+            } catch (error) {
+                showError('Error checking symptoms: ' + error.message);
+            } finally {
                 hideLoading();
+            }
+        }
+
+        // Display results
+        function displayResults(conditions) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            if (conditions.length === 0) {
+                resultsDiv.innerHTML = '<p>No matching conditions found.</p>';
+                return;
+            }
+
+            conditions.forEach(condition => {
+                const resultItem = document.createElement('div');
+                resultItem.className = 'result-item';
+                const ageRangeText = condition.ageRange 
+                    ? `Age range: ${condition.ageRange[0]}-${condition.ageRange[1]} years`
+                    : 'No age restrictions';
+                resultItem.innerHTML = `
+                    <h3>${condition.name}</h3>
+                    <div class="match-count">Matching symptoms: ${condition.matchCount}</div>
+                    <div class="age-range">${ageRangeText}</div>
+                `;
+                resultsDiv.appendChild(resultItem);
             });
         }
 
